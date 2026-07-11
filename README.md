@@ -91,4 +91,4 @@ mouse/keyboard callbacks drive.
 
 ## License
 
-Code is MIT (see `LICENSE-Code` and the SPDX headers).
+Code is MIT (see `LICENSE` and the SPDX headers).
