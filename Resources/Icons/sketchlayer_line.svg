@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <style>
+      .seg   { fill:none; stroke:#3d6d8f; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
+      .guide { stroke:#d0392b; stroke-width:1.6; stroke-dasharray:3 3; stroke-linecap:round; }
+      .dot   { fill:#2ca02c; stroke:#186018; stroke-width:1; }
+    </style>
+  </defs>
+  <polyline class="seg" points="12,48 28,24 46,34" />
+  <line class="guide" x1="46" y1="34" x2="58" y2="30" />
+  <circle class="dot" cx="12" cy="48" r="4" />
+  <circle class="dot" cx="28" cy="24" r="3.2" />
+</svg>

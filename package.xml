@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
+  <name>SketchLayer</name>
+  <description>SketchUp-style inline sketching for FreeCAD: draw line/rectangle geometry directly in the 3D view on the working plane or a selected planar face, with SketchUp-style COLORED inference cues (on-axis, parallel, perpendicular, endpoint) and inline type-to-dimension. Closing a loop makes a lightweight planar face ready to extrude with the companion PushPull addon. Reuses FreeCAD's own Draft snapper for object snapping and adds the colored inference HUD and floating value box that Draft does not provide.</description>
+  <version>0.1.0</version>
+  <date>2026-07-11</date>
+  <maintainer email="177616452+mathmati@users.noreply.github.com">mathmati</maintainer>
+  <license file="LICENSE-Code">MIT</license>
+  <url type="repository" branch="main">https://github.com/mathmati/FreeCAD-SketchLayer</url>
+  <url type="readme">https://github.com/mathmati/FreeCAD-SketchLayer/raw/main/README.md</url>
+  <url type="bugtracker">https://github.com/mathmati/FreeCAD-SketchLayer/issues</url>
+  <icon>Resources/Icons/sketchlayer.svg</icon>
+  <freecadmin>1.1.0</freecadmin>
+  <pythonmin>3.9</pythonmin>
+  <content>
+    <workbench>
+      <classname>SketchLayerWorkbench</classname>
+      <icon>Resources/Icons/sketchlayer.svg</icon>
+    </workbench>
+  </content>
+  <tag>draft</tag>
+  <tag>drawing</tag>
+  <tag>inference</tag>
+  <tag>snapping</tag>
+  <tag>direct-modeling</tag>
+  <tag>ux</tag>
+  <tag>sketchup</tag>
+</package>
