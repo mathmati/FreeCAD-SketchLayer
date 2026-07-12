@@ -92,3 +92,7 @@ mouse/keyboard callbacks drive.
 ## License
 
 Code is MIT (see `LICENSE` and the SPDX headers).
+
+## Transparency
+
+Built with [Claude Code](https://claude.com/claude-code).
