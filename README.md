@@ -15,7 +15,7 @@ extension, on-axis, and more) and can draw on a model face. What it does *not*
 have is the part of SketchUp that makes drawing feel effortless: **colored,
 categorized on-screen inference feedback**, a **floating value box** you type
 into as you draw, and an immediate **loose face** you can push/pull. SketchLayer
-adds exactly that thin perception/UX layer on top of FreeCAD's own geometry —
+adds exactly that thin perception/UX layer on top of FreeCAD's own geometry - 
 it does **not** reimplement Draft's snapping.
 
 ## What it does
@@ -44,7 +44,7 @@ it does **not** reimplement Draft's snapping.
 - **Draw on a face.** Select a planar face before starting and SketchLayer
   aligns the drawing plane to it; otherwise it draws on the global XY plane.
 - **Makes a Push/Pull-ready face.** Closing a rectangle or polyline creates a
-  standalone planar `Part` face — exactly the input the companion
+  standalone planar `Part` face - exactly the input the companion
   [PushPull](https://github.com/mathmati/FreeCAD-PushPull) addon extrudes into
   a solid. Draw a rectangle, then push it up: the SketchUp loop.
 - **Circle and polygon tools.** Click the center, then drag or type an exact
@@ -97,7 +97,7 @@ regression suite simulates a blocked import and asserts that.
   way to change it (default 6, range 3-999).
 - **Drawing plane:** a selected planar face, or the global XY plane. It does
   not yet follow the *hovered* face automatically, nor use an arbitrary Draft
-  working plane — pick the face first.
+  working plane - pick the face first.
 - **Draw-on-face does not split the B-rep.** Like Draft (and unlike SketchUp),
   drawing on an existing face produces an independent face on that plane; it
   does not subdivide the underlying solid's face. That behavior is the biggest

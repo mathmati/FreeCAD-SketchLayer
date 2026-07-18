@@ -1,7 +1,7 @@
-<!-- DRAFT/UNVERIFIED — written 2026-07-18 by an agent WITHOUT FreeCAD available; never executed. mathmati must run with freecadcmd and adjust before committing. -->
-> **DRAFT — for mathmati to review and post manually.**
+<!-- DRAFT/UNVERIFIED - written 2026-07-18 by an agent WITHOUT FreeCAD available; never executed. mathmati must run with freecadcmd and adjust before committing. -->
+> **DRAFT - for mathmati to review and post manually.**
 > Target: `verify/` directory of <https://github.com/mathmati/FreeCAD-SketchLayer>
-> Status: **DRAFT/UNVERIFIED** — written 2026-07-18 by an agent without FreeCAD
+> Status: **DRAFT/UNVERIFIED** - written 2026-07-18 by an agent without FreeCAD
 > on the machine; **never executed**. Run everything below, fix what breaks,
 > and only then commit.
 
@@ -15,7 +15,7 @@ headless-feasible:
 |---|---|
 | headless (`freecadcmd`) regression: inference resolver, face builder, full draw state machine incl. typed dimensions + coplanarity guard, midpoint/center snapping, arrow-key axis lock | `headless_regression.py` (44 checks) |
 | HUD renders the **correct color per category, pixel level** (red/green/magenta) | `drivers/hud_color_driver.py` (needs GUI under Xvfb) |
-| a closed rectangle commits a single planar face of the expected area | headless checks 16–17 **and** `drivers/draw_commit_driver.py` (via the real registered command) |
+| a closed rectangle commits a single planar face of the expected area | headless checks 16-17 **and** `drivers/draw_commit_driver.py` (via the real registered command) |
 | workbench + all five commands auto-register with zero Report-View errors | `drivers/draw_commit_driver.py` (registration asserted; **"zero errors" is a manual eyeball step**, see below) |
 | live drawing driven through the Gui-decoupled `DrawController` | everywhere: all scripts drive `DrawController`/the real commands |
 

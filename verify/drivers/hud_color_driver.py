@@ -1,4 +1,4 @@
-# DRAFT/UNVERIFIED — written 2026-07-18 by an agent WITHOUT FreeCAD available;
+# DRAFT/UNVERIFIED - written 2026-07-18 by an agent WITHOUT FreeCAD available;
 # never executed. mathmati must run with freecadcmd and adjust before committing.
 # SPDX-License-Identifier: MIT
 """verify/drivers/hud_color_driver.py -- GUI (Xvfb) HUD color verification.
