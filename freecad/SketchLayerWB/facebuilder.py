@@ -77,3 +77,57 @@ def add_wire_object(doc, points, closed, name="SketchLayerWire"):
     obj.Shape = wire
     doc.recompute()
     return obj
+
+
+def make_circle_face_shape(center, radius, normal):
+    """Build a planar circular ``Part.Face`` (true circle, not a polyline
+    approximation). Raises :class:`BuildError` on a degenerate radius."""
+    if radius <= 1e-9:
+        raise BuildError("Circle radius is zero; click or type a real radius.")
+    try:
+        edge = Part.makeCircle(
+            float(radius), App.Vector(center), App.Vector(normal))
+        face = Part.Face(Part.Wire([edge]))
+    except Exception as exc:  # noqa: BLE001 - surface a friendly message
+        raise BuildError("Could not build the circle face: %s" % exc)
+    if not face.isValid() or face.Area <= 1e-9:
+        raise BuildError("Resulting circle face is invalid or has zero area.")
+    return face
+
+
+def add_circle_face_object(doc, center, radius, normal, name="SketchLayerCircle"):
+    """Create and return a ``Part::Feature`` holding the circular face --
+    the same standalone-face contract as :func:`add_face_object`, ready for
+    the PushPull addon's extrude path."""
+    face = make_circle_face_shape(center, radius, normal)
+    obj = doc.addObject("Part::Feature", name)
+    obj.Shape = face
+    doc.recompute()
+    return obj
+
+
+def make_arc_edge_shape(p1, p2, p3):
+    """Build the open arc-of-circle edge from ``p1`` through ``p2`` to
+    ``p3``. Raises :class:`BuildError` when the points are collinear: an arc
+    alone never makes a face, so there is no silent fallback to a line."""
+    if geom.circle_through_3pt(p1, p2, p3) is None:
+        raise BuildError(
+            "Arc points are collinear; pick a point off the line.")
+    try:
+        edge = Part.Arc(App.Vector(p1), App.Vector(p2), App.Vector(p3)).toShape()
+    except Exception as exc:  # noqa: BLE001
+        raise BuildError("Could not build the arc: %s" % exc)
+    if not edge.isValid() or edge.Length <= 1e-9:
+        raise BuildError("Resulting arc is invalid or has zero length.")
+    return edge
+
+
+def add_arc_object(doc, p1, p2, p3, name="SketchLayerArc"):
+    """Create and return a ``Part::Feature`` holding a single open arc edge.
+    NB: an edge, not a face -- same as SketchUp, a lone arc cannot be
+    pushed/pulled until other edges close it into a loop."""
+    edge = make_arc_edge_shape(p1, p2, p3)
+    obj = doc.addObject("Part::Feature", name)
+    obj.Shape = edge
+    doc.recompute()
+    return obj

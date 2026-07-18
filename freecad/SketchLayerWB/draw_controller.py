@@ -31,6 +31,14 @@ except Exception:  # pragma: no cover
 
 MODE_LINE = "line"
 MODE_RECT = "rect"
+MODE_CIRCLE = "circle"
+MODE_POLYGON = "polygon"
+MODE_ARC = "arc"
+
+#: default polygon side count (SketchUp's default too)
+DEFAULT_POLY_SIDES = 6
+MIN_POLY_SIDES = 3
+MAX_POLY_SIDES = 999
 
 
 def _parse_dims(buffer):
@@ -46,6 +54,20 @@ def _parse_dims(buffer):
         except ValueError:
             return []
     return out
+
+
+def _parse_sides(buffer):
+    """Parse a SketchUp-style polygon sides buffer ('8s') into an int, or
+    None when the buffer is not exactly ``<digits>s``."""
+    if not buffer:
+        return None
+    text = buffer.strip().lower()
+    if not text.endswith("s"):
+        return None
+    digits = text[:-1]
+    if not digits.isdigit():
+        return None
+    return int(digits)
 
 
 class DrawController(object):
@@ -67,17 +89,21 @@ class DrawController(object):
         self.inference = None       # last Inference for cursor
         self.typed_buffer = ""
         self.endpoint_world = 1.0    # world radius counted as "on a vertex"
+        self.poly_sides = DEFAULT_POLY_SIDES
         self.committed_object = None
         self.last_message = ""
         self.hud = None
         self.vcb = None
+        self.axis_lock = None       # None, "u" or "v" (SketchUp arrow keys)
+        self.doc_edges = []         # edges for midpoint/center snapping
 
     # -- lifecycle -----------------------------------------------------
-    def start(self, plane, mode=MODE_LINE, endpoint_world=1.0):
+    def start(self, plane, mode=MODE_LINE, endpoint_world=1.0, doc_edges=None):
         self.reset()
         self.plane = plane
         self.mode = mode
         self.endpoint_world = float(endpoint_world)
+        self.doc_edges = list(doc_edges) if doc_edges else []
         self.active = True
         if self.view is not None and hud_mod is not None:
             self.hud = hud_mod.InferenceHUD(self.view)
@@ -86,6 +112,47 @@ class DrawController(object):
         self._status(self._prompt())
         return True, "ok"
 
+    # -- arrow-key axis lock (SketchUp) ---------------------------------
+    def set_axis_lock(self, axis_or_none):
+        """Force the effective cursor onto the plane U or V axis through the
+        last placed point (SketchUp's arrow-key lock). ``axis_or_none`` is
+        "u", "v" or None (unlock). Returns the new lock state."""
+        if axis_or_none not in (None, "u", "v"):
+            raise ValueError("axis lock must be None, 'u' or 'v', got %r"
+                             % (axis_or_none,))
+        self.axis_lock = axis_or_none
+        if axis_or_none == "u":
+            self._status("SketchLayer: locked to the red (U) axis "
+                         "(Left/Right again to unlock).")
+        elif axis_or_none == "v":
+            self._status("SketchLayer: locked to the green (V) axis "
+                         "(Up/Down again to unlock).")
+        elif self.active:
+            self._status(self._prompt())
+        # recompute the inference under the new lock state
+        if self.active and self.cursor is not None:
+            self.move_to(self.cursor)
+        return self.axis_lock
+
+    def toggle_axis_lock(self, axis):
+        """SketchUp arrow semantics: pressing the same axis key again
+        unlocks; pressing the other axis' key switches the lock."""
+        if axis not in ("u", "v"):
+            raise ValueError("axis must be 'u' or 'v', got %r" % (axis,))
+        return self.set_axis_lock(None if self.axis_lock == axis else axis)
+
+    def _locked_inference(self):
+        """The forced ON_AXIS_* inference while an axis lock holds, or None
+        when no lock applies (no lock, or no base point to lock through)."""
+        if self.axis_lock not in ("u", "v") or not self.points:
+            return None
+        axis = self.plane.u if self.axis_lock == "u" else self.plane.v
+        base = App.Vector(self.points[-1])
+        t = self.cursor.sub(base).dot(axis)
+        locked = base + axis * t
+        category = infer.ON_AXIS_U if self.axis_lock == "u" else infer.ON_AXIS_V
+        return infer.Inference(category, locked, guide=(base, locked))
+
     # -- live cursor ---------------------------------------------------
     def move_to(self, world_point):
         """Update the live cursor; recompute inference; refresh HUD/VCB.
@@ -93,10 +160,17 @@ class DrawController(object):
         if not self.active:
             return None
         self.cursor = self.plane.project(world_point)
-        self.inference = infer.resolve(
-            self.plane, self.points, self.cursor,
-            endpoint_px_world=self.endpoint_world,
-        )
+        locked = self._locked_inference()
+        if locked is not None:
+            # an axis lock constrains the pick absolutely (SketchUp): no
+            # endpoint/midpoint/parallel arbitration while it holds.
+            self.inference = locked
+        else:
+            self.inference = infer.resolve(
+                self.plane, self.points, self.cursor,
+                endpoint_px_world=self.endpoint_world,
+                doc_edges=self.doc_edges,
+            )
         if self.hud is not None:
             self.hud.update(self.inference, self._band_points())
         if self.vcb is not None:
@@ -105,12 +179,31 @@ class DrawController(object):
 
     def _band_points(self):
         """The rubber-band polyline to preview: the live rectangle's 4
-        corners (rect mode, one corner placed) or the placed points plus the
-        current effective cursor point (line mode)."""
+        corners (rect mode, one corner placed), a polyline approximation of
+        the live circle/polygon (center placed), the arc through the placed
+        points and the cursor (arc mode, two points placed), or the placed
+        points plus the current effective cursor point (line mode)."""
         eff = self._effective_point()
         if self.mode == MODE_RECT and len(self.points) == 1 and eff is not None:
             corners = geom.rectangle_corners(self.plane, self.points[0], eff)
             return corners + [corners[0]]
+        if self.mode == MODE_CIRCLE and len(self.points) == 1 and eff is not None:
+            radius = geom.distance(self.points[0], eff)
+            if radius < 1e-9:
+                return []
+            return geom.circle_band_points(self.plane, self.points[0], radius)
+        if self.mode == MODE_POLYGON and len(self.points) == 1 and eff is not None:
+            if geom.distance(self.points[0], eff) < 1e-9:
+                return []
+            corners = geom.regular_polygon_corners(
+                self.plane, self.points[0], eff, self.poly_sides)
+            return corners + [corners[0]]
+        if self.mode == MODE_ARC and len(self.points) == 2 and eff is not None:
+            band = geom.arc_band_points(self.points[0], self.points[1], eff)
+            if band is not None:
+                return band
+            # collinear so far: plain polyline until the end point bends
+            return [self.points[0], self.points[1], eff]
         band = list(self.points)
         if eff is not None:
             band = band + [eff]
@@ -143,6 +236,32 @@ class DrawController(object):
             self._status(self._prompt())
             return None
 
+        if self.mode in (MODE_CIRCLE, MODE_POLYGON):
+            self.points.append(App.Vector(pt))
+            if len(self.points) >= 2:
+                if self.mode == MODE_CIRCLE:
+                    return self._finish_circle(
+                        self.points[0], geom.distance(self.points[0], pt))
+                return self._finish_polygon(self.points[0], pt)
+            self._status(self._prompt())
+            return None
+
+        if self.mode == MODE_ARC:
+            if len(self.points) >= 2:
+                # third point: refuse a collinear pick instead of committing
+                # a shape; the tool stays alive for another try (or Esc).
+                if geom.circle_through_3pt(
+                        self.points[0], self.points[1], pt) is None:
+                    self._status(
+                        "SketchLayer Arc: points are collinear; click an end "
+                        "point off the line (Esc cancels).")
+                    return None
+                return self._finish_arc(self.points[0], self.points[1], pt)
+            self.points.append(App.Vector(pt))
+            self.typed_buffer = ""
+            self._status(self._prompt())
+            return None
+
         # line / polyline
         if self.points and self.inference is not None and \
                 self.inference.category == infer.ENDPOINT and \
@@ -158,9 +277,16 @@ class DrawController(object):
     def type_char(self, ch):
         if not self.active:
             return
-        if ch in "0123456789.,xX* ":
+        allowed = "0123456789.,xX* "
+        if self.mode == MODE_POLYGON:
+            allowed += "sS"  # SketchUp-style sides count: '8s'
+        if ch in allowed:
             if ch == "." and self.typed_buffer.endswith("."):
                 return
+            if ch in "sS":
+                if "s" in self.typed_buffer.lower():
+                    return
+                ch = "s"
             self.typed_buffer += ch
         else:
             return
@@ -174,17 +300,52 @@ class DrawController(object):
                 self.vcb.set_text(self.typed_buffer or self._live_dim_text())
 
     def key_return(self):
-        """Enter: apply a typed dimension if present, else close/commit."""
+        """Enter: apply a typed dimension (or polygon sides) if present,
+        else close/commit at the cursor."""
         if not self.active:
             return None
+        if self.mode == MODE_POLYGON and "s" in self.typed_buffer.lower():
+            sides = _parse_sides(self.typed_buffer)
+            if sides is None:
+                # a buffer with 's' that is not '<n>s' is a rejected sides
+                # change, never a commit-at-cursor
+                self._status("SketchLayer Polygon: type sides as <n>s (e.g. "
+                             "8s); still %d." % self.poly_sides)
+                self.typed_buffer = ""
+                if self.vcb is not None:
+                    self.vcb.set_text(self._live_dim_text())
+                return None
+            return self._apply_sides(sides)
         dims = _parse_dims(self.typed_buffer)
         if dims:
             return self._apply_typed(dims)
         # no typed value -> close/commit at cursor
         if self.mode == MODE_RECT and len(self.points) == 1 and self.cursor is not None:
             return self._finish_rectangle(self.points[0], self._effective_point())
+        if self.mode in (MODE_CIRCLE, MODE_POLYGON) and len(self.points) == 1 \
+                and self.cursor is not None:
+            return self.add_point()
         if self.mode == MODE_LINE and len(self.points) >= 3:
             return self.close_path()
+        return None
+
+    def _apply_sides(self, sides):
+        """SketchUp-style '<n>s' typed mid-tool: change the polygon side
+        count without committing."""
+        if not MIN_POLY_SIDES <= sides <= MAX_POLY_SIDES:
+            self._status("SketchLayer Polygon: sides must be between %d and "
+                         "%d (still %d)." % (
+                             MIN_POLY_SIDES, MAX_POLY_SIDES, self.poly_sides))
+            self.typed_buffer = ""
+            if self.vcb is not None:
+                self.vcb.set_text(self._live_dim_text())
+            return None
+        self.poly_sides = sides
+        self.typed_buffer = ""
+        self._status(self._prompt())
+        # refresh the preview band with the new side count
+        if self.cursor is not None:
+            self.move_to(self.cursor)
         return None
 
     def _apply_typed(self, dims):
@@ -206,6 +367,16 @@ class DrawController(object):
             au, av = self.plane.to_local(a)
             b = self.plane.to_world(au + su * abs(w), av + sv * abs(h))
             return self._finish_rectangle(a, b)
+        if self.mode in (MODE_CIRCLE, MODE_POLYGON):
+            # typed radius: exact value, no cursor-distance rounding
+            if not self.points:
+                return None
+            center = self.points[0]
+            radius = abs(dims[0])
+            if self.mode == MODE_CIRCLE:
+                return self._finish_circle(center, radius)
+            direction = self._radius_direction(center)
+            return self._finish_polygon(center, center + direction * radius)
         # line: typed length along the current direction from the last point
         if not self.points:
             return None
@@ -231,6 +402,17 @@ class DrawController(object):
         if d.Length < 1e-9:
             return None
         return d * (1.0 / d.Length)
+
+    def _radius_direction(self, center):
+        """Unit direction from the center toward the effective cursor, used
+        to place a polygon vertex for a typed circumradius. Falls back to
+        the plane U axis when the cursor sits on the center."""
+        tgt = self._effective_point()
+        if tgt is not None:
+            d = App.Vector(tgt).sub(center)
+            if d.Length >= 1e-9:
+                return d * (1.0 / d.Length)
+        return self.plane.u
 
     # -- build / finish ------------------------------------------------
     def close_path(self):
@@ -260,6 +442,51 @@ class DrawController(object):
         self._teardown()
         return obj
 
+    def _finish_circle(self, center, radius):
+        try:
+            obj = facebuilder.add_circle_face_object(
+                self.doc, center, radius, self.plane.normal)
+        except facebuilder.BuildError as exc:
+            self.last_message = "SketchLayer: %s" % exc
+            self._teardown()
+            return None
+        self.committed_object = obj
+        self.last_message = "SketchLayer: created circle '%s' (radius %.3g)." % (
+            obj.Name, radius)
+        self._teardown()
+        return obj
+
+    def _finish_polygon(self, center, radius_point):
+        corners = geom.regular_polygon_corners(
+            self.plane, center, radius_point, self.poly_sides)
+        try:
+            obj = facebuilder.add_face_object(
+                self.doc, corners, name="SketchLayerPolygon")
+        except facebuilder.BuildError as exc:
+            self.last_message = "SketchLayer: %s" % exc
+            self._teardown()
+            return None
+        self.committed_object = obj
+        self.last_message = ("SketchLayer: created polygon '%s' (%d sides, "
+                             "area %.3g)." % (
+                                 obj.Name, self.poly_sides, obj.Shape.Area))
+        self._teardown()
+        return obj
+
+    def _finish_arc(self, p1, p2, p3):
+        try:
+            obj = facebuilder.add_arc_object(self.doc, p1, p2, p3)
+        except facebuilder.BuildError as exc:
+            self.last_message = "SketchLayer: %s" % exc
+            self._teardown()
+            return None
+        self.committed_object = obj
+        self.last_message = ("SketchLayer: created arc '%s' (length %.3g; an "
+                             "open edge, not a face)." % (
+                                 obj.Name, obj.Shape.Length))
+        self._teardown()
+        return obj
+
     def cancel(self):
         self.last_message = "SketchLayer: cancelled."
         self._teardown()
@@ -280,12 +507,27 @@ class DrawController(object):
             return self.typed_buffer
         if not self.points or self.cursor is None:
             return ""
+        eff = self._effective_point()
         if self.mode == MODE_RECT and len(self.points) == 1:
             au, av = self.plane.to_local(self.points[0])
-            cu, cv = self.plane.to_local(self._effective_point())
+            cu, cv = self.plane.to_local(eff)
             return "%.3g x %.3g" % (abs(cu - au), abs(cv - av))
+        if self.mode == MODE_CIRCLE and len(self.points) == 1:
+            return "%.3g" % geom.distance(self.points[0], eff)
+        if self.mode == MODE_POLYGON and len(self.points) == 1:
+            return "%.3g (%ds)" % (
+                geom.distance(self.points[0], eff), self.poly_sides)
+        if self.mode == MODE_ARC:
+            if len(self.points) == 2 and eff is not None:
+                circ = geom.circle_through_3pt(
+                    self.points[0], self.points[1], eff)
+                if circ is not None:
+                    return "R %.3g" % circ[1]
+                return ""
+            if len(self.points) < 2:
+                return "%.3g" % geom.distance(self.points[-1], eff)
         base = self.points[-1]
-        return "%.3g" % geom.distance(base, self._effective_point())
+        return "%.3g" % geom.distance(base, eff)
 
     def _prompt(self):
         if self.mode == MODE_RECT:
@@ -293,6 +535,25 @@ class DrawController(object):
                 return "SketchLayer Rectangle: click first corner (Esc cancels)."
             return ("SketchLayer Rectangle: click opposite corner, or type "
                     "W,H and press Enter.")
+        if self.mode == MODE_CIRCLE:
+            if not self.points:
+                return "SketchLayer Circle: click the center (Esc cancels)."
+            return ("SketchLayer Circle: click a point on the circle, or "
+                    "type a radius and press Enter.")
+        if self.mode == MODE_POLYGON:
+            if not self.points:
+                return ("SketchLayer Polygon: click the center (Esc cancels). "
+                        "Type <n>s for sides, now %d." % self.poly_sides)
+            return ("SketchLayer Polygon: click a vertex, or type a "
+                    "circumradius and press Enter. (%d sides)" % self.poly_sides)
+        if self.mode == MODE_ARC:
+            n = len(self.points)
+            if n == 0:
+                return "SketchLayer Arc: click the start point (Esc cancels)."
+            if n == 1:
+                return "SketchLayer Arc: click a second point on the curve."
+            return ("SketchLayer Arc: click the end point. (An arc is an "
+                    "edge, not a face.)")
         n = len(self.points)
         if n == 0:
             return "SketchLayer Line: click start point (Esc cancels)."

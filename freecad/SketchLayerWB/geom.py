@@ -134,6 +134,81 @@ def rectangle_corners(plane, corner_a, corner_b):
     ]
 
 
+def circle_through_3pt(p1, p2, p3):
+    """Circumcircle of three world points. Returns
+    ``(center, radius, normal)`` or None when the points are coincident or
+    collinear (no finite circle passes through them)."""
+    a = App.Vector(p1)
+    u = App.Vector(p2).sub(a)
+    v = App.Vector(p3).sub(a)
+    if u.Length < 1e-12 or v.Length < 1e-12:
+        return None
+    n = u.cross(v)
+    # collinear when the parallelogram area vanishes relative to the sides
+    if n.Length <= 1e-12 * max(u.Length, v.Length) ** 2:
+        return None
+    # circumcenter of the triangle a, a+u, a+v
+    center = a + (v.cross(n) * (u.Length ** 2) + n.cross(u) * (v.Length ** 2)) \
+        * (1.0 / (2.0 * n.Length ** 2))
+    return center, distance(center, a), n * (1.0 / n.Length)
+
+
+def regular_polygon_corners(plane, center, radius_point, sides):
+    """World corners of the regular N-gon on ``plane`` with circumradius
+    ``|center -> radius_point|`` and one vertex at ``radius_point``."""
+    cu, cv = plane.to_local(center)
+    pu, pv = plane.to_local(radius_point)
+    du, dv = pu - cu, pv - cv
+    radius = math.hypot(du, dv)
+    a0 = math.atan2(dv, du)
+    return [
+        plane.to_world(
+            cu + radius * math.cos(a0 + 2.0 * math.pi * k / sides),
+            cv + radius * math.sin(a0 + 2.0 * math.pi * k / sides))
+        for k in range(sides)
+    ]
+
+
+def circle_band_points(plane, center, radius, segments=48):
+    """Closed polyline approximation of a circle (``segments`` + 1 points),
+    for the HUD rubber band only -- the committed shape is a true circle."""
+    cu, cv = plane.to_local(center)
+    return [
+        plane.to_world(
+            cu + radius * math.cos(2.0 * math.pi * k / segments),
+            cv + radius * math.sin(2.0 * math.pi * k / segments))
+        for k in range(segments + 1)
+    ]
+
+
+def arc_band_points(p1, p2, p3, segments=32):
+    """Polyline approximation of the arc from ``p1`` through ``p2`` to
+    ``p3`` (``segments`` + 1 points), or None when the three points define
+    no circle (collinear). For the HUD rubber band only."""
+    circ = circle_through_3pt(p1, p2, p3)
+    if circ is None:
+        return None
+    center, radius, normal = circ
+    e1 = App.Vector(p1).sub(center)
+    e1 = e1 * (1.0 / e1.Length)
+    e2 = normal.cross(e1)
+
+    def angle_of(p):
+        d = App.Vector(p).sub(center)
+        a = math.atan2(d.dot(e2), d.dot(e1))
+        return a if a >= 0 else a + 2.0 * math.pi
+
+    a2 = angle_of(p2)
+    a3 = angle_of(p3)
+    # sweep from p1 (angle 0) to p3 passing through p2
+    sweep = a3 if a2 <= a3 else a3 - 2.0 * math.pi
+    return [
+        center + e1 * (radius * math.cos(sweep * k / segments))
+        + e2 * (radius * math.sin(sweep * k / segments))
+        for k in range(segments + 1)
+    ]
+
+
 def signed_angle(plane, from_dir, to_dir):
     """Signed angle (radians, -pi..pi) from ``from_dir`` to ``to_dir``
     measured in the plane (positive = u->v sense)."""

@@ -21,7 +21,9 @@ class SketchLayerWorkbench(Gui.Workbench):
     def Initialize(self):
         from . import commands
         commands.register()
-        tools = ["SketchLayer_Line", "SketchLayer_Rectangle"]
+        tools = ["SketchLayer_Line", "SketchLayer_Rectangle",
+                 "SketchLayer_Circle", "SketchLayer_Polygon",
+                 "SketchLayer_Arc"]
         self.appendToolbar("SketchLayer", tools)
         self.appendMenu("SketchLayer", tools)
 

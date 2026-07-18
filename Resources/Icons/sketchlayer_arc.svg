@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <style>
+      .seg   { fill:none; stroke:#3d6d8f; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
+      .dot   { fill:#2ca02c; stroke:#186018; stroke-width:1; }
+    </style>
+  </defs>
+  <path class="seg" d="M14 42 A18 18 0 0 1 50 42" />
+  <circle class="dot" cx="14" cy="42" r="3.5" />
+  <circle class="dot" cx="32" cy="24" r="3.5" />
+  <circle class="dot" cx="50" cy="42" r="3.5" />
+</svg>

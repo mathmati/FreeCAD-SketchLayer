@@ -1,0 +1,49 @@
+[ ok   1] inference: no points yet -> FREE (gray, no lock)
+[ ok   2] inference: near plane U axis -> ON_AXIS_U, locked onto the axis, red
+[ ok   3] inference: near plane V axis -> ON_AXIS_V, locked onto the axis, green
+[ ok   4] inference: outside the 6-degree cone -> FREE
+[ ok   5] inference: continuing the last segment -> PARALLEL (magenta)
+[ ok   6] inference: at right angles to the last segment -> PERPENDICULAR
+[ ok   7] inference: near the start point -> ENDPOINT (green dot, no guide)
+[ ok   8] inference: ENDPOINT beats an axis lock (priority order)
+[ ok   9] inference: both axes fire near the base -> nearer axis wins
+[ ok  10] inference: axis guide runs base -> projection along the axis
+[ ok  11] facebuilder: 10x10 square -> valid Part.Face of area 100
+[ ok  12] facebuilder: fewer than 3 points -> BuildError
+[ ok  13] facebuilder: the coplanarity guard rejects non-coplanar points
+[ ok  14] facebuilder: an explicit duplicate closing vertex is tolerated
+[ ok  15] facebuilder: add_face_object creates a Part::Feature in the document
+[ ok  16] draw: rectangle by two clicks -> face of the expected area (40)
+[ ok  17] draw: typed 'W,H' + Enter -> rectangle of exact area (96)
+[ ok  18] draw: polyline closes into a face by clicking the start point
+[ ok  19] draw: typed length places the next vertex exactly along the direction
+[ ok  20] draw: Enter with an open polyline closes it into a face (area 50)
+[ ok  21] draw: Esc cancel mid-draw leaves the document untouched
+[ ok  22] draw: a degenerate path surfaces a friendly message, not a crash
+[ ok  23] draw: typed-buffer rules (reject letters, no double dot, backspace)
+[ ok  24] draw: the dimension parser accepts '12,8' '12x8' '12*8' '12 8'
+[ ok  25] circle: center + drag -> planar face, radius exact, area pi r^2
+[ ok  26] circle: typed radius + Enter -> exact radius, planar face
+[ ok  27] circle: a zero-radius second click refuses with a friendly message
+[ ok  28] circle: Esc cancel after the center leaves the document untouched
+[ ok  29] circle: the live band is a closed ring at the cursor radius
+[ ok  30] polygon: default 6 sides -> hexagon face, exact regular area
+[ ok  31] polygon: typed '8s' mid-tool switches to an octagon before commit
+[ ok  32] polygon: typed circumradius + Enter -> every vertex at that radius
+[ ok  33] polygon: sides buffer rules ('s' line-mode, bad counts, bare 's')
+[ ok  34] polygon: Esc cancel after the center leaves the document untouched
+[ ok  35] arc: 3 points -> open edge, center/radius/on-curve/length exact
+[ ok  36] arc: collinear third point refuses (tool stays alive); cancel is clean
+[ ok  37] inference: midpoint of a path segment fires (cyan), beating the axis
+[ ok  38] inference: no midpoint fires away from any midpoint (still FREE)
+[ ok  39] inference: center of a circular document edge snaps (steel blue)
+[ ok  40] inference: ENDPOINT beats a midpoint when both are in range
+[ ok  41] axis lock: U projects an off-axis cursor onto the U line through the base
+[ ok  42] axis lock: V projects an off-axis cursor onto the V line through the base
+[ ok  43] axis lock: toggle and unlock restore free inference
+[ ok  44] axis lock: typed length commits the exact distance along the locked axis
+[ ok  45] toolstate hook: no-ops cleanly when SketchUI is not importable
+[ ok  46] toolstate hook: fires mark_active/mark_inactive; wired in commands.py
+----------------------------------------------------------------
+46/46 checks pass
+SYSTEM_EXIT code=0
