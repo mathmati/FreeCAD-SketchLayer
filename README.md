@@ -1,8 +1,8 @@
 # SketchLayer for FreeCAD
 
 SketchUp-style inline drawing for FreeCAD: draw a **line/polyline** or a
-**rectangle** directly in the 3D view — on the working plane or a selected
-planar face — with SketchUp-style **colored inference cues** and inline
+**rectangle** directly in the 3D view - on the working plane or a selected
+planar face - with SketchUp-style **colored inference cues** and inline
 **type-to-dimension**. Close a loop and you get a lightweight planar face,
 ready to extrude with the companion **PushPull** addon.
 
@@ -11,29 +11,29 @@ ready to extrude with the companion **PushPull** addon.
 FreeCAD's built-in **Draft** workbench already has a strong, SketchUp-inspired
 snapping engine (endpoint, midpoint, perpendicular, parallel, intersection,
 extension, on-axis, and more) and can draw on a model face. What it does *not*
-have is the part of SketchUp that makes drawing feel effortless: **colored,
+have is the part of SketchUp that makes drawing feel easy: **colored,
 categorized on-screen inference feedback**, a **floating value box** you type
 into as you draw, and an immediate **loose face** you can push/pull. SketchLayer
-adds exactly that thin perception/UX layer on top of FreeCAD's own geometry —
+adds exactly that thin perception/UX layer on top of FreeCAD's own geometry -
 it does **not** reimplement Draft's snapping.
 
 ## What it does
 
 - **Colored inference HUD.** As you move the cursor, SketchLayer shows a
   colored cue for the strongest inference relative to what you're drawing:
-  - **red** — aligned to the working plane's first axis ("on red axis"),
-  - **green** — aligned to the second axis ("on green axis"),
-  - **magenta** — parallel or perpendicular to the segment you just drew,
-  - **green dot** — on an existing path point (so you can close the loop).
+  - **red** - aligned to the working plane's first axis ("on red axis"),
+  - **green** - aligned to the second axis ("on green axis"),
+  - **magenta** - parallel or perpendicular to the segment you just drew,
+  - **green dot** - on an existing path point (so you can close the loop).
   The inference also *locks the point onto that line*, so a near-aligned
-  cursor snaps exactly onto the axis/parallel — like SketchUp.
+  cursor snaps exactly onto the axis/parallel - like SketchUp.
 - **Type-to-dimension (floating value box).** Start a segment and type a
-  length, or `W,H` for a rectangle, then press Enter — the exact dimension is
+  length, or `W,H` for a rectangle, then press Enter - the exact dimension is
   applied. No focus change, no dialog.
 - **Draw on a face.** Select a planar face before starting and SketchLayer
   aligns the drawing plane to it; otherwise it draws on the global XY plane.
 - **Makes a Push/Pull-ready face.** Closing a rectangle or polyline creates a
-  standalone planar `Part` face — exactly the input the companion
+  standalone planar `Part` face - exactly the input the companion
   [PushPull](https://github.com/mathmati/FreeCAD-PushPull) addon extrudes into
   a solid. Draw a rectangle, then push it up: the SketchUp loop.
 - **Reuses Draft's snapper.** For snaps to *existing model geometry*,
@@ -56,7 +56,7 @@ Esc cancels at any time, leaving the document unchanged.
 - **Tools:** Line/polyline and Rectangle. (Circle/arc/offset are future work.)
 - **Drawing plane:** a selected planar face, or the global XY plane. It does
   not yet follow the *hovered* face automatically, nor use an arbitrary Draft
-  working plane — pick the face first.
+  working plane - pick the face first.
 - **Draw-on-face does not split the B-rep.** Like Draft (and unlike SketchUp),
   drawing on an existing face produces an independent face on that plane; it
   does not subdivide the underlying solid's face. That behavior is the biggest
@@ -81,12 +81,12 @@ at the XY plane):
 
 Checked against a real FreeCAD 1.1 install: the workbench and both commands
 auto-register with zero Report-View errors; the colored inference HUD renders
-the **correct color per category** (verified at the pixel level —
+the **correct color per category** (verified at the pixel level -
 red/green/magenta); a closed rectangle commits a single planar face of the
 expected area; and a headless (`freecadcmd`) regression exercises the
 inference resolver, face builder, and the full draw state machine including
 typed dimensions and the coplanarity guard. The live drawing is driven through
-SketchLayer's Gui-decoupled `DrawController` — the same object the
+SketchLayer's Gui-decoupled `DrawController` - the same object the
 mouse/keyboard callbacks drive.
 
 ## License
