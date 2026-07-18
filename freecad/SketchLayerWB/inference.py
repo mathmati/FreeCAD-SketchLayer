@@ -192,7 +192,11 @@ def resolve(plane, points, cursor, tol_deg=6.0, endpoint_px_world=None,
         snap = _nearest_snap(points, doc_edges, cursor, endpoint_px_world)
         if snap is not None:
             category, pt = snap
-            return Inference(category, App.Vector(pt), guide=None)
+            # Document-edge candidates can sit off the working plane; the
+            # draw tools are plane-locked, so return the on-plane footprint
+            # (committing a raw off-plane midpoint would break the line
+            # tool's coplanar close and tilt circles/arcs out of the plane).
+            return Inference(category, plane.project(pt), guide=None)
 
     if not points:
         return Inference(FREE, cursor)

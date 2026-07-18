@@ -237,12 +237,23 @@ class DrawController(object):
             return None
 
         if self.mode in (MODE_CIRCLE, MODE_POLYGON):
+            if self.points and geom.distance(self.points[0], pt) < 1e-9:
+                # the pick snapped exactly onto the center (easy to do: the
+                # center is an endpoint snap target); refuse and stay alive,
+                # same idiom as the arc's collinear refusal
+                what = "Circle" if self.mode == MODE_CIRCLE else "Polygon"
+                self._status(
+                    "SketchLayer %s: radius is zero (the pick snapped onto "
+                    "the center); click farther out or type a radius (Esc "
+                    "cancels)." % what)
+                return None
             self.points.append(App.Vector(pt))
             if len(self.points) >= 2:
                 if self.mode == MODE_CIRCLE:
                     return self._finish_circle(
                         self.points[0], geom.distance(self.points[0], pt))
                 return self._finish_polygon(self.points[0], pt)
+            self.typed_buffer = ""
             self._status(self._prompt())
             return None
 
@@ -377,6 +388,18 @@ class DrawController(object):
                 return self._finish_circle(center, radius)
             direction = self._radius_direction(center)
             return self._finish_polygon(center, center + direction * radius)
+        if self.mode == MODE_ARC:
+            # A 3-point arc has no single typed dimension. Refuse instead of
+            # falling through to the line branch below, which would append a
+            # phantom vertex the arc commit then ignores (and whose segment
+            # corrupts the parallel/perpendicular inference for the real
+            # end-point click).
+            self._status("SketchLayer Arc: no typed dimension here; click "
+                         "the three points (Esc cancels).")
+            self.typed_buffer = ""
+            if self.vcb is not None:
+                self.vcb.set_text(self._live_dim_text())
+            return None
         # line: typed length along the current direction from the last point
         if not self.points:
             return None

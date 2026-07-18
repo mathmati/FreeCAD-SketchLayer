@@ -56,6 +56,18 @@ _AXIS_LOCK_KEYS = {
 }
 
 
+def _typing_modifiers_ok(event):
+    """True when the key event carries no modifiers beyond Shift/Keypad.
+
+    Shift is legitimate typing ('*' is Shift+8 on many layouts) and numpad
+    digits arrive with KeypadModifier, but a Ctrl/Alt/Meta chord (Ctrl+S
+    save, Ctrl+X cut, ...) is an application shortcut, never tool typing --
+    it must neither be swallowed nor fed into the typed buffer."""
+    other = event.modifiers() & ~(
+        QtCore.Qt.ShiftModifier | QtCore.Qt.KeypadModifier)
+    return not other
+
+
 def _is_bare_letter_or_space(event):
     """True for an unmodified A-Z key or Space.
 
@@ -70,6 +82,14 @@ def _is_bare_letter_or_space(event):
         return False
     key = event.key()
     return QtCore.Qt.Key_A <= key <= QtCore.Qt.Key_Z or key == QtCore.Qt.Key_Space
+
+
+#: The one live drawing session. Starting any draw tool cancels the
+#: previous one first: without this, a second toolbar click stacked a
+#: second SoEvent callback and application-level key filter on top of the
+#: first, both controllers received every click, and only the newest
+#: filter saw Esc (the orphaned one kept consuming keys).
+_current_session = None
 
 
 class _DrawSession(object):
@@ -88,6 +108,10 @@ class _DrawSession(object):
         self.controller = None
 
     def start(self):
+        global _current_session
+        if _current_session is not None and _current_session is not self:
+            _current_session.abort()
+        _current_session = self
         doc = App.ActiveDocument
         if doc is None:
             doc = App.newDocument()
@@ -102,6 +126,17 @@ class _DrawSession(object):
         self._install_key_filter()
         if self.command_name:
             toolstate_hook.tool_started(self.command_name)
+
+    def abort(self):
+        """Cancel a still-running session because another tool is starting:
+        cancel the controller (document untouched) and remove the view
+        callback and key filter so nothing orphaned keeps eating events."""
+        try:
+            if self.controller is not None and self.controller.active:
+                self.controller.cancel()
+        except Exception:  # noqa: BLE001 - teardown must always run
+            pass
+        self._teardown()
 
     # -- drawing plane --------------------------------------------------
     def _pick_plane(self):
@@ -149,11 +184,15 @@ class _DrawSession(object):
     def wants_key(self, event):
         if self.controller is None or not self.controller.active:
             return False
-        if event.key() in _AXIS_LOCK_KEYS or _is_bare_letter_or_space(event):
+        if event.key() in (
+                QtCore.Qt.Key_Escape, QtCore.Qt.Key_Return,
+                QtCore.Qt.Key_Enter, QtCore.Qt.Key_Backspace):
             return True
-        return event.key() in _TYPE_KEYS or event.key() in (
-            QtCore.Qt.Key_Escape, QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter,
-            QtCore.Qt.Key_Backspace)
+        if event.key() in _AXIS_LOCK_KEYS:
+            return event.modifiers() == QtCore.Qt.NoModifier
+        if event.key() in _TYPE_KEYS:
+            return _typing_modifiers_ok(event)
+        return _is_bare_letter_or_space(event)
 
     def handle_key(self, event):
         if self.controller is None or not self.controller.active:
@@ -175,7 +214,7 @@ class _DrawSession(object):
                 event.modifiers() == QtCore.Qt.NoModifier:
             self.controller.toggle_axis_lock(_AXIS_LOCK_KEYS[key])
             return True
-        if key in _TYPE_KEYS:
+        if key in _TYPE_KEYS and _typing_modifiers_ok(event):
             self.controller.type_char(_TYPE_KEYS[key])
             return True
         if _is_bare_letter_or_space(event):
@@ -261,6 +300,7 @@ class _DrawSession(object):
             return None, None
 
     def _teardown(self):
+        global _current_session
         if self._view is not None and self._sg_callback is not None:
             try:
                 self._view.removeEventCallback("SoEvent", self._sg_callback)
@@ -270,6 +310,8 @@ class _DrawSession(object):
         self._remove_key_filter()
         if self.command_name:
             toolstate_hook.tool_finished(self.command_name)
+        if _current_session is self:
+            _current_session = None
 
 
 class _KeyFilter(QtCore.QObject):

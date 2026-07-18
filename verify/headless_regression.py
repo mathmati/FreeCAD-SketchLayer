@@ -5,7 +5,7 @@ Run from the repo root:
 
     freecadcmd verify/headless_regression.py
 
-Exit code 0 and a final "46/46 checks pass" line when green.
+Exit code 0 and a final "50/50 checks pass" line when green.
 
 What this is: the headless half of the SketchLayer README's "Verification"
 section -- "a headless (freecadcmd) regression exercises the inference
@@ -55,6 +55,12 @@ Checks (one shared document; order matters):
                               untouched either way), and fires mark_active /
                               mark_inactive through a fake toolstate; static
                               xref of the hook call sites in commands.py
+   v0.3 review fixes   47-50  arc typed dims refused (no phantom vertex),
+                              off-plane doc-edge snap projected onto the
+                              working plane (resolver + full line close),
+                              circle/polygon center click clears the typed
+                              buffer, Ctrl-chord typing guard in commands.py
+                              (static xref)
 """
 import math
 import os
@@ -93,7 +99,7 @@ MODE_CIRCLE = draw_controller.MODE_CIRCLE
 MODE_POLYGON = draw_controller.MODE_POLYGON
 MODE_ARC = draw_controller.MODE_ARC
 
-EXPECTED_CHECKS = 46
+EXPECTED_CHECKS = 50
 V = App.Vector
 
 _checks = []
@@ -446,8 +452,13 @@ def c27(fx):
     ok(obj is None, "zero-radius circle committed")
     ok("radius" in ctl.last_message.lower(),
        "unexpected message: %r" % ctl.last_message)
-    ok(not ctl.active, "controller still active after failed commit")
-    ok(len(fx.doc.Objects) == before, "document changed after failed commit")
+    # the refusal keeps the tool alive (same idiom as the arc's collinear
+    # refusal): the user can click farther out or type a radius
+    ok(ctl.active, "controller died on a zero-radius pick")
+    obj = ctl.add_point(V(9, 5, 0))  # a real second pick still works
+    ok(obj is not None, "retry after zero-radius refusal did not commit")
+    ok(len(fx.doc.Objects) == before + 1, "retry did not add the circle")
+    fx.doc.removeObject(obj.Name)
 
 
 @check("circle: Esc cancel after the center leaves the document untouched")
@@ -871,6 +882,100 @@ def c46(fx):
                        ("MODE_ARC", "SketchLayer_Arc")):
         needle = '_DrawSession(%s, "%s")' % (mode, name)
         ok(needle in src, "%r missing from commands.py" % needle)
+
+
+# --- 47-50: v0.3 adversarial-review fixes ----------------------------------------
+@check("arc: typed digits + Enter are refused, never a phantom vertex")
+def c47(fx):
+    ctl = DrawController(fx.doc)
+    ctl.start(fx.plane, MODE_ARC)
+    ctl.add_point(V(0, 0, 0))
+    ctl.add_point(V(5, 3, 0))
+    ctl.move_to(V(10, 0, 0))
+    ctl.type_char("5")
+    before = len(fx.doc.Objects)
+    ok(ctl.key_return() is None, "typed dims committed in arc mode")
+    ok(len(ctl.points) == 2,
+       "typed dims appended a vertex (%d points)" % len(ctl.points))
+    ok(ctl.active, "typed-dims refusal ended the tool")
+    ok(ctl.typed_buffer == "", "typed buffer not cleared after refusal")
+    ok(len(fx.doc.Objects) == before, "refusal created a document object")
+    # the end-point click still commits exactly where clicked
+    ctl.move_to(V(10, 0, 0))
+    obj = ctl.add_point()
+    ok(obj is not None, "arc did not commit after refusal: %s"
+       % ctl.last_message)
+    vec_approx(obj.Shape.Edges[0].Vertexes[-1].Point, V(10, 0, 0), 1e-6,
+               "arc end moved by a stale typed state")
+
+
+@check("inference: off-plane doc-edge midpoint snaps to its on-plane footprint")
+def c48(fx):
+    edge = Part.makeLine(V(5, -1, 0.5), V(5, 1, 0.5))  # midpoint (5,0,0.5)
+    inf = infer.resolve(fx.plane, [V(0, 0, 0)], V(5, 0.05, 0),
+                        endpoint_px_world=1.0, doc_edges=[edge])
+    ok(inf.category == infer.MIDPOINT, "category is %s" % inf.category)
+    vec_approx(inf.point, V(5, 0, 0), 1e-9,
+               "snap point not projected onto the working plane")
+    # and a full polyline that uses the snap still closes into a flat face
+    ctl = DrawController(fx.doc)
+    ctl.start(fx.plane, MODE_LINE, endpoint_world=1.0, doc_edges=[edge])
+    ctl.add_point(V(0, 0, 0))
+    live = ctl.move_to(V(5, 0.05, 0))
+    ok(live.category == infer.MIDPOINT, "live category is %s" % live.category)
+    ctl.add_point()
+    approx(ctl.points[-1].z, 0.0, 1e-9, "committed vertex left the plane")
+    ctl.add_point(V(5, 5, 0))
+    ctl.add_point(V(0, 5, 0))
+    obj = ctl.key_return()  # Enter-close
+    ok(obj is not None, "snapped polyline did not close: %s" % ctl.last_message)
+    ok(is_planar_face(obj.Shape.Faces[0]), "closed face is not planar")
+
+
+@check("circle/polygon: the center click clears a stale typed buffer")
+def c49(fx):
+    ctl = DrawController(fx.doc)
+    ctl.start(fx.plane, MODE_POLYGON)
+    ctl.type_char("8")
+    ctl.type_char("s")
+    ctl.add_point(V(0, 0, 0))
+    ok(ctl.typed_buffer == "", "polygon center kept buffer %r"
+       % ctl.typed_buffer)
+    ctl.move_to(V(10, 0, 0))
+    ctl.type_char("1")
+    ctl.type_char("2")
+    obj = ctl.key_return()
+    ok(obj is not None, "typed radius after center did not commit: %s"
+       % ctl.last_message)
+    for v in obj.Shape.Vertexes:
+        approx(geom.distance(v.Point, V(0, 0, 0)), 12.0, 1e-9,
+               "vertex off the typed circumradius")
+    ctl = DrawController(fx.doc)
+    ctl.start(fx.plane, MODE_CIRCLE)
+    ctl.type_char("9")
+    ctl.add_point(V(0, 0, 0))
+    ok(ctl.typed_buffer == "", "circle center kept buffer %r"
+       % ctl.typed_buffer)
+    ctl.cancel()
+
+
+@check("commands.py: Ctrl-chords are gated out of typing (static xref)")
+def c50(fx):
+    src_path = os.path.join(_REPO_ROOT, "freecad", "SketchLayerWB",
+                            "commands.py")
+    with open(src_path, encoding="utf-8") as fh:
+        src = fh.read()
+    ok("def _typing_modifiers_ok(event):" in src,
+       "_typing_modifiers_ok helper missing")
+    wants = src.index("def wants_key(self, event):")
+    handle = src.index("def handle_key(self, event):")
+    mouse = src.index("def _on_event(self, arg):")
+    first = src.index("_typing_modifiers_ok(event)", wants)
+    ok(wants < first < handle, "wants_key does not gate typing modifiers")
+    second = src.index("_typing_modifiers_ok(event)", handle)
+    ok(handle < second < mouse, "handle_key does not gate typing modifiers")
+    ok("key in _TYPE_KEYS and _typing_modifiers_ok(event)" in src,
+       "handle_key feeds chorded keys into the typed buffer")
 
 
 def main():

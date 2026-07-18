@@ -154,7 +154,7 @@ SketchUI highlight hook: a no-op when `freecad.SketchUIWB` is not
 importable (the import is blocked in the check, and the draw behavior is
 asserted unchanged), and `mark_active`/`mark_inactive` firing through a
 fake toolstate, plus a static xref of the hook call sites in commands.py.
-46/46 checks pass. The live drawing
+50/50 checks pass. The live drawing
 is driven through SketchLayer's Gui-decoupled `DrawController`, the same
 object the mouse/keyboard callbacks drive.
 
